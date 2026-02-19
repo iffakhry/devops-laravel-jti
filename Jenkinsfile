@@ -41,7 +41,7 @@ node {
                     dosen1@$PROD_HOST:/home/dosen1/prod.kelasdevops.xyz/ \
                     --exclude=.env \
                     --exclude=storage \
-                    --exclude=.git"
+                    --exclude=.git
                 """
             }
         }
