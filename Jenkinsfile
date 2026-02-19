@@ -36,7 +36,13 @@ node {
             sshagent (credentials: ['ssh-prod']) {
                 sh 'mkdir -p ~/.ssh'
                 sh 'ssh-keyscan -H "$PROD_HOST" > ~/.ssh/known_hosts'
-                sh "rsync -rav --delete ./laravel/ dosen1@$PROD_HOST:/home/dosen1/prod.kelasdevops.xyz/ --exclude=.env --exclude=storage --exclude=.git"
+                sh """
+                    rsync -rav --delete ./ \
+                    dosen1@$PROD_HOST:/home/dosen1/prod.kelasdevops.xyz/ \
+                    --exclude=.env \
+                    --exclude=storage \
+                    --exclude=.git"
+                """
             }
         }
     }
