@@ -1,59 +1,103 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+## Notes
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+## untuk proses demo jenkins di local komputer (tanpa vps)
 
-## About Laravel
+isi Jenkinsfile:
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+```jenkinsfile
+node {
+    checkout scm
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+    // ── STAGE BUILD (sama dengan modul Acara 12) ─────────────────
+    docker.image('composer:latest').inside('-u root') {
+            sh 'rm -f composer.lock'
+            sh 'composer install --ignore-platform-reqs'
+            // Note: --ignore-platform-reqs berguna jika container composer
+            // punya ekstensi PHP yang berbeda dengan server tujuan.
+        }
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+    // ── STAGE TEST (sama dengan modul) ───────────────────────────
+    stage('Test') {
+        docker.image('ubuntu').inside('-u root') {
+            sh 'echo "Running tests..."'
+            // Aktifkan jika sudah ada unit test:
+            // sh 'php artisan test'
+        }
+    }
 
-## Learning Laravel
+    // ── STAGE DEPLOY ke PROD ──────────────────────────────────────
+    // Di modul  : rsync ke IP VPS (PROD_HOST = IP publik)
+    // Di lokal  : rsync ke container prod-app (PROD_HOST = prod-app)
+    stage('Deploy') {
+        docker.image('agung3wi/alpine-rsync:1.1').inside('-u root') {
+            sshagent(credentials: ['ssh-prod']) {
+                sh 'mkdir -p ~/.ssh'
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+                // prod-app = nama Docker container (pengganti IP VPS di modul)
+                sh 'ssh-keyscan -H "$PROD_HOST" > ~/.ssh/known_hosts'
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+                sh """rsync -rav --delete ./laravel/ \
+                    ubuntu@\$PROD_HOST:/home/ubuntu/prod.kelasdevops.xyz/ \
+                    --exclude=.env --exclude=storage --exclude=.git"""
+            }
+        }
+    }
+}
+```
 
-## Laravel Sponsors
+### untuk proses demo jenkins di vps
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+isi Jenkinsfile:
 
-### Premium Partners
+```jenkinsfile
+node {
+    checkout scm
+    // deploy env dev
+    stage("Build"){
+        // docker.image('shippingdocker/php-composer:7.4').inside('-u root') {
+        //     sh 'rm composer.lock'
+        //     sh 'composer install'
+        // }
+        docker.image('composer:latest').inside('-u root') {
+            sh 'rm -f composer.lock'
+            sh 'composer install --ignore-platform-reqs'
+            // Note: --ignore-platform-reqs berguna jika container composer
+            // punya ekstensi PHP yang berbeda dengan server tujuan.
+        }
+    }
+    stage("Prepare Laravel"){
+        // Gunakan image PHP 8.4 untuk menjalankan artisan
+        docker.image('php:8.4-cli').inside('-u root') {
+            sh 'cp .env.example .env'
+            sh 'php artisan key:generate'
+            sh 'chmod -R 777 storage bootstrap/cache'
+        }
+    }
+    // Testing
+    stage("Testing"){
+        docker.image('ubuntu').inside('-u root') {
+            sh 'echo "Ini adalah test"'
+        }
+    }
+    // deploy env prod
+    stage("Deploy"){
+        // Di sini Anda bisa menambahkan langkah untuk mengirim file ke server produksi
+        // Misalnya menggunakan scp atau rsync
+        sh 'echo "Deploying to production server..."'
+        docker.image('agung3wi/alpine-rsync:1.1').inside('-u root') {
+            sshagent (credentials: ['ssh-prod']) {
+                sh 'mkdir -p ~/.ssh'
+                sh 'ssh-keyscan -H "$PROD_HOST" > ~/.ssh/known_hosts'
+                sh """
+                    rsync -rav --delete ./ \
+                    dosen1@$PROD_HOST:/home/dosen1/prod.kelasdevops.xyz/ \
+                    --exclude=.env \
+                    --exclude=storage \
+                    --exclude=.git
+                """
+            }
+        }
+    }
+}
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
-
-## Contributing
-
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```
